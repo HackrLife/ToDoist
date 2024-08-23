@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Kanban Board</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        .board {
+            background-color: #e0e0e0;
+            border-radius: 5px;
+            padding: 10px;
+            width: 300px;
+            margin-bottom: 20px;
+        }
+        .board-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .board-title {
+            font-size: 18px;
+            font-weight: bold;
+        }
+        .task {
+            background-color: white;
+            border-radius: 3px;
+            padding: 10px;
+            margin-bottom: 10px;
+            cursor: move;
+        }
+        .task-actions {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 5px;
+        }
+        .task-actions button {
+            margin-left: 5px;
+            cursor: pointer;
+        }
+        .add-task {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: 15% auto;
+            padding: 20px;
+            border: 1px solid #888;
+            width: 300px;
+            border-radius: 5px;
+        }
+        .close {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .close:hover {
+            color: #000;
+        }
+        #addBoardBtn {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <button id="addBoardBtn">Add New Board</button>
+    <div id="container" class="container"></div>
+
+    <div id="taskModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle">Add Task</h2>
+            <input type="text" id="taskInput" placeholder="Enter task description">
+            <button id="saveTaskBtn">Save</button>
+        </div>
+    </div>
+
+    <div id="boardModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Add New Board</h2>
+            <input type="text" id="boardTitleInput" placeholder="Enter board title">
+            <select id="boardCategorySelect">
+                <option value="default">Default</option>
+                <option value="work">Work</option>
+                <option value="personal">Personal</option>
+                <option value="urgent">Urgent</option>
+            </select>
+            <button id="saveBoardBtn">Save</button>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('container');
+        const taskModal = document.getElementById('taskModal');
+        const boardModal = document.getElementById('boardModal');
+        const taskInput = document.getElementById('taskInput');
+        const saveTaskBtn = document.getElementById('saveTaskBtn');
+        const addBoardBtn = document.getElementById('addBoardBtn');
+        const boardTitleInput = document.getElementById('boardTitleInput');
+        const boardCategorySelect = document.getElementById('boardCategorySelect');
+        const saveBoardBtn = document.getElementById('saveBoardBtn');
+
+        let boards = [];
+        let currentBoard = null;
+        let editingTask = null;
+
+        const categoryColors = {
+            default: '#e0e0e0',
+            work: '#81D4FA',
+            personal: '#FFD54F',
+            urgent: '#EF9A9A'
+        };
+
+        function createBoard(title, category = 'default') {
+            const board = document.createElement('div');
+            board.className = 'board';
+            board.style.backgroundColor = categoryColors[category];
+            board.innerHTML = `
+                <div class="board-header">
+                    <span class="board-title">${title}</span>
+                    <button class="add-task">Add Task</button>
+                </div>
+            `;
+            container.appendChild(board);
+
+            const addTaskBtn = board.querySelector('.add-task');
+            addTaskBtn.addEventListener('click', () => openTaskModal(board));
+
+            board.addEventListener('dragover', allowDrop);
+            board.addEventListener('drop', drop);
+
+            boards.push(board);
+        }
+
+        function createTask(description) {
+            const task = document.createElement('div');
+            task.className = 'task';
+            task.draggable = true;
+            task.innerHTML = `
+                <div>${description}</div>
+                <div class="task-actions">
+                    <button class="edit-task">Edit</button>
+                    <button class="delete-task">Delete</button>
+                </div>
+            `;
+
+            task.addEventListener('dragstart', drag);
+
+            const editBtn = task.querySelector('.edit-task');
+            editBtn.addEventListener('click', () => openTaskModal(currentBoard, task));
+
+            const deleteBtn = task.querySelector('.delete-task');
+            deleteBtn.addEventListener('click', () => task.remove());
+
+            return task;
+        }
+
+        function openTaskModal(board, task = null) {
+            currentBoard = board;
+            editingTask = task;
+            taskModal.style.display = 'block';
+            document.getElementById('modalTitle').textContent = task ? 'Edit Task' : 'Add Task';
+            taskInput.value = task ? task.firstElementChild.textContent : '';
+            taskInput.focus();
+        }
+
+        function closeTaskModal() {
+            taskModal.style.display = 'none';
+            taskInput.value = '';
+            currentBoard = null;
+            editingTask = null;
+        }
+
+        function openBoardModal() {
+            boardModal.style.display = 'block';
+            boardTitleInput.focus();
+        }
+
+        function closeBoardModal() {
+            boardModal.style.display = 'none';
+            boardTitleInput.value = '';
+            boardCategorySelect.value = 'default';
+        }
+
+        saveTaskBtn.addEventListener('click', () => {
+            const description = taskInput.value.trim();
+            if (description) {
+                if (editingTask) {
+                    editingTask.firstElementChild.textContent = description;
+                } else {
+                    const newTask = createTask(description);
+                    currentBoard.appendChild(newTask);
+                }
+                closeTaskModal();
+            }
+        });
+
+        saveBoardBtn.addEventListener('click', () => {
+            const title = boardTitleInput.value.trim();
+            const category = boardCategorySelect.value;
+            if (title) {
+                createBoard(title, category);
+                closeBoardModal();
+            }
+        });
+
+        addBoardBtn.addEventListener('click', openBoardModal);
+
+        document.querySelectorAll('.close').forEach(closeBtn => {
+            closeBtn.addEventListener('click', () => {
+                closeTaskModal();
+                closeBoardModal();
+            });
+        });
+
+        window.addEventListener('click', (event) => {
+            if (event.target === taskModal || event.target === boardModal) {
+                closeTaskModal();
+                closeBoardModal();
+            }
+        });
+
+        function allowDrop(event) {
+            event.preventDefault();
+        }
+
+        function drag(event) {
+            event.dataTransfer.setData('text', event.target.id);
+        }
+
+        function drop(event) {
+            event.preventDefault();
+            const taskId = event.dataTransfer.getData('text');
+            const task = document.getElementById(taskId);
+            if (task && event.target.classList.contains('board')) {
+                event.target.appendChild(task);
+            }
+        }
+
+        // Initialize with some default boards
+        createBoard('To Do');
+        createBoard('In Progress', 'work');
+        createBoard('Done', 'personal');
+    </script>
+</body>
+</html>
